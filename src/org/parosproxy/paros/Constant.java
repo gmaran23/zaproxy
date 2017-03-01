@@ -57,6 +57,11 @@
 // ZAP: 2015/03/10 Issue 653: Handle updates on Kali better
 // ZAP: 2015/03/30 Issue 1582: Enablers for low memory option
 // ZAP: 2015/04/12 Remove "installation" fuzzers dir, no longer in use
+// ZAP: 2015/08/01 Remove code duplication in catch of exceptions, use installation directory in default config file
+// ZAP: 2015/11/11 Issue 2045: Dont copy old configs if -dir option used 
+// ZAP: 2015/11/26 Issue 2084: Warn users if they are probably using out of date versions
+// ZAP: 2016/02/17 Convert extensions' options to not use extensions' names as XML element names
+// ZAP: 2016/05/12 Use dev/weekly dir for plugin downloads when copying the existing 'release' config file
 
 package org.parosproxy.paros;
 
@@ -70,7 +75,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.InvalidParameterException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -112,9 +120,10 @@ public final class Constant {
     public static final String ALPHA_VERSION = "alpha";
     public static final String BETA_VERSION = "beta";
     
-    private static final long VERSION_TAG = 2003000;
+    private static final long VERSION_TAG = 2004003;
     
     // Old version numbers - for upgrade
+    private static final long V_2_4_3_TAG = 2004003;
     private static final long V_2_3_1_TAG = 2003001;
     private static final long V_2_2_0_TAG = 2002000;
     private static final long V_2_1_0_TAG = 2001000;
@@ -147,6 +156,11 @@ public final class Constant {
 
     public static final String FILE_SEPARATOR = System.getProperty("file.separator");
     
+    /**
+     * @deprecated (2.4.2) The path does not take into account the installation directory, use
+     *             {@link #getPathDefaultConfigFile()} instead.
+     */
+    @Deprecated
     public static final String FILE_CONFIG_DEFAULT = "xml/config.xml";
     public static final String FILE_CONFIG_NAME = "config.xml";
     public static final String FOLDER_PLUGIN = "plugin";
@@ -201,7 +215,8 @@ public final class Constant {
     // 
     // Home dir for ZAP, ie where the config file is. Can be set on cmdline, otherwise will be set to default loc
     private static String zapHome = null;
-    // Default home dir for 'full' releases - only used for copying full conf file when dev/daily release run for the first time
+    // Default home dir for 'full' releases - used for copying full conf file when dev/daily release run for the first time
+    // and also for the JVM options config file
     private static String zapStd = null;
     // Install dir for ZAP, but default will be cwd
     private static String zapInstall = null;
@@ -289,6 +304,36 @@ public final class Constant {
     	initializeFilesAndDirectories();
     	setAcceleratorKeys();
     }
+    
+    public static String getDefaultHomeDirectory(boolean incDevOption) {
+    	if (zapStd == null) {
+    		zapStd = System.getProperty("user.home");
+            if (zapStd == null) {
+            	zapStd = ".";
+            }
+
+            if (isLinux()) {
+            	// Linux: Hidden Zap directory in the user's home directory
+            	zapStd += FILE_SEPARATOR + "." + PROGRAM_NAME_SHORT;
+    		} else if (isMacOsX()) {
+    			// Mac Os X: Support for writing the configuration into the users Library 
+    			zapStd += FILE_SEPARATOR + "Library" + FILE_SEPARATOR
+    				+ "Application Support" + FILE_SEPARATOR + PROGRAM_NAME_SHORT;
+    		} else {
+    			// Windows: Zap directory in the user's home directory
+    			zapStd += FILE_SEPARATOR + PROGRAM_NAME;
+    		}
+    	}
+    	
+        if (incDevOption) {
+	        if (isDevBuild() || isDailyBuild()) {
+	        	// Default to a different home dir to prevent messing up full releases
+	        	return zapStd + "_D";
+	        }
+        }
+        return zapStd;
+    		
+    }
     	
     private void initializeFilesAndDirectories() {
 
@@ -304,31 +349,10 @@ public final class Constant {
         PROGRAM_TITLE = PROGRAM_NAME + " " + PROGRAM_VERSION;
 
         if (zapHome == null) {
-            zapHome = System.getProperty("user.home");
-            if (zapHome == null) {
-            	zapHome = ".";
-            }
-
-            if (isLinux()) {
-            	// Linux: Hidden Zap directory in the user's home directory
-            	zapHome += FILE_SEPARATOR + "." + PROGRAM_NAME_SHORT;
-			} else if (isMacOsX()) {
-				// Mac Os X: Support for writing the configuration into the users Library 
-				zapHome += FILE_SEPARATOR + "Library" + FILE_SEPARATOR
-					+ "Application Support" + FILE_SEPARATOR + PROGRAM_NAME_SHORT;
-			} else {
-				// Windows: Zap directory in the user's home directory
-				zapHome += FILE_SEPARATOR + PROGRAM_NAME;
-			}
-            // Will use default when first dev/daily release run
-            zapStd = zapHome;
-            if (isDevBuild() || isDailyBuild()) {
-            	// Default to a different home dir to prevent messing up full releases
-            	zapHome += "_D";
-            }
+            zapHome = getDefaultHomeDirectory(true);
         }
 
-		zapHome = getAbsolutePath(zapHome);
+        zapHome = getAbsolutePath(zapHome);
 		f = new File(zapHome);
 		
 		FILE_CONFIG = zapHome + FILE_CONFIG;
@@ -363,19 +387,25 @@ public final class Constant {
             	File oldf;
                 if (isDevBuild() || isDailyBuild()) {
                 	// try standard location
-                	oldf = new File (zapStd + FILE_SEPARATOR + FILE_CONFIG_NAME);
+                	oldf = new File (getDefaultHomeDirectory(false) + FILE_SEPARATOR + FILE_CONFIG_NAME);
                 } else {
                 	// try old location
                 	oldf = new File (zapHome + FILE_SEPARATOR + "zap" + FILE_SEPARATOR + FILE_CONFIG_NAME);
                 }
             	
-            	if (oldf.exists()) {
+            	if (oldf.exists() && Paths.get(zapHome).equals(Paths.get(getDefaultHomeDirectory(true)))) {
+            		// Dont copy old configs if they've specified a non std directory
             		log.info("Copying defaults from " + oldf.getAbsolutePath() + " to " + FILE_CONFIG);
             		copier.copy(oldf,f);
             		
+            		if (isDevBuild() || isDailyBuild()) {
+            		    ZapXmlConfiguration newConfig = new ZapXmlConfiguration(f);
+            		    newConfig.setProperty(OptionsParamCheckForUpdates.DOWNLOAD_DIR, Constant.FOLDER_LOCAL_PLUGIN);
+            		    newConfig.save();
+            		}
             	} else {
-            		log.info("Copying defaults from " + FILE_CONFIG_DEFAULT + " to " + FILE_CONFIG);
-            		copier.copy(new File(FILE_CONFIG_DEFAULT),f);
+            		log.info("Copying defaults from " + getPathDefaultConfigFile() + " to " + FILE_CONFIG);
+            		copier.copy(getPathDefaultConfigFile().toFile(),f);
             	}
             }
             
@@ -483,6 +513,9 @@ public final class Constant {
 	            	if (ver <= V_2_3_1_TAG) {
 	            		upgradeFrom2_3_1(config);
 	            	}
+                    if (ver <= V_2_4_3_TAG) {
+                        upgradeFrom2_4_3(config);
+                    }
 	            	log.info("Upgraded from " + ver);
             		
             		// Update the version
@@ -490,22 +523,11 @@ public final class Constant {
             		config.save();
             	}
 
-	        } catch (ConfigurationException e) {
-	            //  if there is any error in config file (eg config file not exist),
+	        } catch (ConfigurationException | ConversionException | NoSuchElementException e) {
+	            //  if there is any error in config file (eg config file not exist, corrupted),
 	            //  overwrite previous configuration file 
 	            // ZAP: changed to use the correct file
-	            copier.copy(new File(FILE_CONFIG_DEFAULT), new File(FILE_CONFIG));
-
-	        } catch (ConversionException e) {
-	            //  if there is any error in config file (eg config file not exist),
-	            //  overwrite previous configuration file 
-	            // ZAP: changed to use the correct file
-	            copier.copy(new File(FILE_CONFIG_DEFAULT), new File(FILE_CONFIG));
-	
-	        } catch (NoSuchElementException e) {
-	            //  overwrite previous configuration file if config file corrupted
-	            // ZAP: changed to use the correct file
-	            copier.copy(new File(FILE_CONFIG_DEFAULT), new File(FILE_CONFIG));
+	            copier.copy(getPathDefaultConfigFile().toFile(), new File(FILE_CONFIG));
 	            
 	        }
         } catch (Exception e) {
@@ -556,7 +578,7 @@ public final class Constant {
     private void upgradeFrom1_1_0(XMLConfiguration config) throws ConfigurationException {
 		// Upgrade the regexs
         // ZAP: Changed to use ZapXmlConfiguration, to enforce the same character encoding when reading/writing configurations.
-        XMLConfiguration newConfig = new ZapXmlConfiguration(FILE_CONFIG_DEFAULT);
+        XMLConfiguration newConfig = new ZapXmlConfiguration(getPathDefaultConfigFile().toFile());
         newConfig.setAutoSave(false);
 
         copyAllProperties(newConfig, config, "pscans");                
@@ -565,7 +587,7 @@ public final class Constant {
     private void upgradeFrom1_2_0(XMLConfiguration config) throws ConfigurationException {
 		// Upgrade the regexs
         // ZAP: Changed to use ZapXmlConfiguration, to enforce the same character encoding when reading/writing configurations.
-        XMLConfiguration newConfig = new ZapXmlConfiguration(FILE_CONFIG_DEFAULT);
+        XMLConfiguration newConfig = new ZapXmlConfiguration(getPathDefaultConfigFile().toFile());
         newConfig.setAutoSave(false);
 
         copyProperty(newConfig, config, "view.editorView");
@@ -754,6 +776,28 @@ public final class Constant {
         config.clearTree("options.auth");
     }
 
+    private void upgradeFrom2_4_3(XMLConfiguration config) {
+        List<Object[]> oldData = new ArrayList<>();
+        // Convert extensions' options to not use extensions' names as XML element names
+        for (Iterator<String> it = config.getKeys("ext"); it.hasNext();) {
+            String key = it.next();
+
+            Object[] data = new Object[2];
+            data[0] = key.substring(4);
+            data[1] = config.getBoolean(key);
+            oldData.add(data);
+        }
+        config.clearTree("ext");
+
+        for (int i = 0, size = oldData.size(); i < size; ++i) {
+            String elementBaseKey = "extensions.extension(" + i + ").";
+            Object[] data = oldData.get(i);
+
+            config.setProperty(elementBaseKey + "name", data[0]);
+            config.setProperty(elementBaseKey + "enabled", data[1]);
+        }
+    }
+
 	public static void setLocale (String loc) {
         String[] langArray = loc.split("_");
         Locale locale = new Locale(langArray[0], langArray[1]);
@@ -871,6 +915,16 @@ public final class Constant {
     	return zapHome;
     }
 
+    /**
+     * Returns the path to default configuration file, located in installation directory.
+     *
+     * @return the {@code Path} to default configuration file.
+     * @since 2.4.2
+     */
+    public static Path getPathDefaultConfigFile() {
+        return Paths.get(getZapInstall(), "xml", FILE_CONFIG_NAME);
+    }
+
 	public static File getContextsDir () {
 		File f = new File(Constant.getZapHome(), USER_CONTEXTS_DIR);
 		if (! f.exists()) {
@@ -916,23 +970,64 @@ public final class Constant {
     	return zapInstall;
     }
 
-    private static String getVersionFromManifest() {
+    private static Manifest getManifest() {
     	String className = Constant.class.getSimpleName() + ".class";
     	String classPath = Constant.class.getResource(className).toString();
     	if (!classPath.startsWith("jar")) {
     	  // Class not from JAR
-    	  return DEV_VERSION;
+    	  return null;
     	}
     	String manifestPath = classPath.substring(0, classPath.lastIndexOf("!") + 1) + "/META-INF/MANIFEST.MF";
-    	Manifest manifest;
 		try {
-			manifest = new Manifest(new URL(manifestPath).openStream());
-	    	Attributes attr = manifest.getMainAttributes();
-	    	return attr.getValue("Implementation-Version");
+			return new Manifest(new URL(manifestPath).openStream());
 		} catch (Exception e) {
 			// Ignore
-			return DEV_VERSION;
+			return null;
 		}
+    }
+
+    private static String getVersionFromManifest() {
+    	Manifest manifest = getManifest();
+    	if (manifest != null) {
+	    	Attributes attr = manifest.getMainAttributes();
+	    	return attr.getValue("Implementation-Version");
+    	} else {
+			return DEV_VERSION;
+    	}
+    }
+    
+    public static Date getReleaseCreateDate() {
+    	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    	Manifest manifest = getManifest();
+    	if (manifest != null) {
+	    	Attributes attr = manifest.getMainAttributes();
+	    	try {
+				return sdf.parse(attr.getValue("Create-Date"));
+			} catch (ParseException e) {
+				// Ignore - treat as undated
+			}
+    	}
+		return null;
+    }
+
+    public static Date getInstallDate() {
+    	String className = Constant.class.getSimpleName() + ".class";
+    	String classPath = Constant.class.getResource(className).toString();
+    	if (!classPath.startsWith("jar:file:")) {
+    	  // Class not from JAR
+    	  return null;
+    	}
+    	classPath = classPath.substring(9);
+    	int ind = classPath.indexOf("!");
+    	if (ind > 0) {
+    		classPath = classPath.substring(0, ind);
+    	}
+    	File f = new File(classPath);
+    	if (f.exists()) {
+        	// Choose the parent directories date, in case the creation date was maintained
+    		return new Date(f.getParentFile().lastModified());
+    	}
+    	return null;
     }
     
     public static boolean isDevBuild() {

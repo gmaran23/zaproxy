@@ -22,14 +22,26 @@ package org.zaproxy.zap.control;
 
 import org.junit.Test;
 
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.*;
+
+import java.io.File;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.Collection;
+
+import org.apache.commons.configuration.tree.xpath.XPathExpressionEngine;
+import org.zaproxy.zap.utils.ZapXmlConfiguration;
 
 
 /**
  * Unit test for {@link AddOn}.
  */
 public class AddOnUnitTest {
+
+	private static final File ZAP_VERSIONS_XML = 
+			Paths.get("test/resources/org/zaproxy/zap/control", "ZapVersions-deps.xml").toFile();
 
 	@Test
 	public void testIsAddon() throws Exception {
@@ -108,11 +120,12 @@ public class AddOnUnitTest {
 	@Test
 	public void testCanLoadAddOnNotBefore() throws Exception {
 		AddOn ao = new AddOn("test-alpha-1.zap");
-		assertTrue(ao.canLoadInVersion("2.0.0"));
+		ao.setNotBeforeVersion("2.4.0");
+		assertTrue(ao.canLoadInVersion("2.4.0"));
 		
-		ao.setNotBeforeVersion("2.0.0");
-		assertTrue(ao.canLoadInVersion("2.0.0"));
-		assertTrue(ao.canLoadInVersion("2.1.0"));
+		ao.setNotBeforeVersion("2.4.0");
+		assertTrue(ao.canLoadInVersion("2.4.0"));
+		assertTrue(ao.canLoadInVersion("2.5.0"));
 		assertFalse(ao.canLoadInVersion("1.4.0"));
 		assertFalse(ao.canLoadInVersion("2.0.alpha"));
 	}
@@ -120,27 +133,139 @@ public class AddOnUnitTest {
 	@Test
 	public void testCanLoadAddOnNotFrom() throws Exception {
 		AddOn ao = new AddOn("test-alpha-1.zap");
-		ao.setNotFromVersion("2.3.0");
-		assertTrue(ao.canLoadInVersion("1.4.0"));
-		assertTrue(ao.canLoadInVersion("2.1.0"));
-		assertTrue(ao.canLoadInVersion("2.2.0"));
-		assertFalse(ao.canLoadInVersion("2.3.0"));
-		assertFalse(ao.canLoadInVersion("2.3.0.1"));
-		assertFalse(ao.canLoadInVersion("2.4.0"));
+		ao.setNotBeforeVersion("2.4.0");
+		ao.setNotFromVersion("2.8.0");
+		assertTrue(ao.canLoadInVersion("2.4.0"));
+		assertTrue(ao.canLoadInVersion("2.5.0"));
+		assertTrue(ao.canLoadInVersion("2.7.0"));
+		assertFalse(ao.canLoadInVersion("2.8.0"));
+		assertFalse(ao.canLoadInVersion("2.8.0.1"));
+		assertFalse(ao.canLoadInVersion("2.9.0"));
 	}
 
 	@Test
 	public void testCanLoadAddOnNotBeforeNotFrom() throws Exception {
 		AddOn ao = new AddOn("test-alpha-1.zap");
-		assertTrue(ao.canLoadInVersion("2.0.0"));
-		ao.setNotBeforeVersion("2.0.0");
-		ao.setNotFromVersion("2.3.0");
-		assertTrue(ao.canLoadInVersion("2.0.0"));
-		assertTrue(ao.canLoadInVersion("2.1.0"));
-		assertTrue(ao.canLoadInVersion("2.2.0"));
-		assertFalse(ao.canLoadInVersion("2.3.0"));
-		assertFalse(ao.canLoadInVersion("2.3.0.1"));
-		assertFalse(ao.canLoadInVersion("2.4.0"));
+		ao.setNotBeforeVersion("2.4.0");
+		assertTrue(ao.canLoadInVersion("2.4.0"));
+		ao.setNotFromVersion("2.7.0");
+		assertTrue(ao.canLoadInVersion("2.4.0"));
+		assertTrue(ao.canLoadInVersion("2.5.0"));
+		assertTrue(ao.canLoadInVersion("2.6.0"));
+		assertFalse(ao.canLoadInVersion("2.7.0"));
+		assertFalse(ao.canLoadInVersion("2.7.0.1"));
+		assertFalse(ao.canLoadInVersion("2.8.0"));
 		
+	}
+
+	@Test
+	public void shouldDependOnDependency() throws Exception {
+		// Given
+		ZapXmlConfiguration zapVersionsXml = createZapVersionsXml();
+		AddOn addOn = createAddOn("AddOn1", zapVersionsXml);
+		AddOn dependency = createAddOn("AddOn3", zapVersionsXml);
+		// When
+		boolean depends = addOn.dependsOn(dependency);
+		// Then
+		assertThat(depends, is(equalTo(true)));
+	}
+
+	@Test
+	public void shouldNotDependIfNoDependencies() throws Exception {
+		// Given
+		AddOn addOn = new AddOn("AddOn-release-1.zap");
+		AddOn nonDependency = createAddOn("AddOn3", createZapVersionsXml());
+		// When
+		boolean depends = addOn.dependsOn(nonDependency);
+		// Then
+		assertThat(depends, is(equalTo(false)));
+	}
+
+	@Test
+	public void shouldNotDependOnNonDependency() throws Exception {
+		// Given
+		ZapXmlConfiguration zapVersionsXml = createZapVersionsXml();
+		AddOn addOn = createAddOn("AddOn9", zapVersionsXml);
+		AddOn nonDependency = createAddOn("AddOn3", zapVersionsXml);
+		// When
+		boolean depends = addOn.dependsOn(nonDependency);
+		// Then
+		assertThat(depends, is(equalTo(false)));
+	}
+
+	@Test
+	public void shouldNotDirectlyDependOnNonDirectDependency() throws Exception {
+		// Given
+		ZapXmlConfiguration zapVersionsXml = createZapVersionsXml();
+		AddOn addOn = createAddOn("AddOn1", zapVersionsXml);
+		AddOn nonDirectDependency = createAddOn("AddOn8", zapVersionsXml);
+		// When
+		boolean depends = addOn.dependsOn(nonDirectDependency);
+		// Then
+		assertThat(depends, is(equalTo(false)));
+	}
+
+	@Test
+	public void shouldNotDependOnItSelf() throws Exception {
+		// Given
+		ZapXmlConfiguration zapVersionsXml = createZapVersionsXml();
+		AddOn addOn = createAddOn("AddOn1", zapVersionsXml);
+		AddOn sameAddOn = createAddOn("AddOn1", zapVersionsXml);
+		// When
+		boolean depends = addOn.dependsOn(sameAddOn);
+		// Then
+		assertThat(depends, is(equalTo(false)));
+	}
+
+	@Test
+	public void shouldDependOnDependencies() throws Exception {
+		// Given
+		ZapXmlConfiguration zapVersionsXml = createZapVersionsXml();
+		AddOn addOn = createAddOn("AddOn1", zapVersionsXml);
+		AddOn nonDependency = createAddOn("AddOn9", zapVersionsXml);
+		AddOn dependency = createAddOn("AddOn3", zapVersionsXml);
+		Collection<AddOn> addOns = Arrays.asList(new AddOn[] { nonDependency, dependency });
+		// When
+		boolean depends = addOn.dependsOn(addOns);
+		// Then
+		assertThat(depends, is(equalTo(true)));
+	}
+
+	@Test
+	public void shouldNotDirectlyDependOnNonDirectDependencies() throws Exception {
+		// Given
+		ZapXmlConfiguration zapVersionsXml = createZapVersionsXml();
+		AddOn addOn = createAddOn("AddOn1", zapVersionsXml);
+		AddOn nonDependency = createAddOn("AddOn9", zapVersionsXml);
+		AddOn nonDirectDependency = createAddOn("AddOn8", zapVersionsXml);
+		Collection<AddOn> addOns = Arrays.asList(new AddOn[] { nonDependency, nonDirectDependency });
+		// When
+		boolean depends = addOn.dependsOn(addOns);
+		// Then
+		assertThat(depends, is(equalTo(false)));
+	}
+
+	@Test
+	public void shouldNotDependOnNonDependencies() throws Exception {
+		// Given
+		ZapXmlConfiguration zapVersionsXml = createZapVersionsXml();
+		AddOn addOn = createAddOn("AddOn1", zapVersionsXml);
+		AddOn nonDependency1 = createAddOn("AddOn1", zapVersionsXml);
+		AddOn nonDependency2 = createAddOn("AddOn9", zapVersionsXml);
+		Collection<AddOn> addOns = Arrays.asList(new AddOn[] { nonDependency1, nonDependency2 });
+		// When
+		boolean depends = addOn.dependsOn(addOns);
+		// Then
+		assertThat(depends, is(equalTo(false)));
+	}
+
+	private static ZapXmlConfiguration createZapVersionsXml() throws Exception {
+		ZapXmlConfiguration zapVersionsXml = new ZapXmlConfiguration(ZAP_VERSIONS_XML);
+		zapVersionsXml.setExpressionEngine(new XPathExpressionEngine());
+		return zapVersionsXml;
+	}
+
+	protected static AddOn createAddOn(String addOnId, ZapXmlConfiguration zapVersions) throws Exception {
+		return new AddOn(addOnId, Paths.get("").toFile(), zapVersions.configurationAt("addon_" + addOnId));
 	}
 }

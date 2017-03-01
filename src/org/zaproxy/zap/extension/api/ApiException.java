@@ -28,6 +28,7 @@ import javax.xml.transform.stream.StreamResult;
 
 import net.sf.json.JSONObject;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.log4j.Logger;
 import org.parosproxy.paros.Constant;
 import org.w3c.dom.Document;
@@ -38,49 +39,81 @@ public class ApiException extends Exception {
 
 	private static final long serialVersionUID = 1L;
 	
-	public enum Type {BAD_FORMAT, BAD_TYPE, NO_IMPLEMENTOR, BAD_ACTION, BAD_VIEW, BAD_OTHER, INTERNAL_ERROR, MISSING_PARAMETER, 
-		URL_NOT_FOUND, HREF_NOT_FOUND, SCAN_IN_PROGRESS, DISABLED, ALREADY_EXISTS, DOES_NOT_EXIST, ILLEGAL_PARAMETER, CONTEXT_NOT_FOUND,
-		USER_NOT_FOUND, URL_NOT_IN_CONTEXT, BAD_API_KEY, SCRIPT_NOT_FOUND, BAD_SCRIPT_FORMAT, NO_ACCESS};
+	public enum Type {
+		/**
+		 * Indicates that the response's format requested is not valid.
+		 * 
+		 * @see API.Format
+		 */
+		BAD_FORMAT,
+		BAD_TYPE, NO_IMPLEMENTOR, BAD_ACTION, BAD_VIEW, BAD_OTHER, INTERNAL_ERROR, MISSING_PARAMETER, 
+		URL_NOT_FOUND, HREF_NOT_FOUND, SCAN_IN_PROGRESS, DISABLED, ALREADY_EXISTS, DOES_NOT_EXIST,
+		/**
+		 * Indicates that the value of a parameter is illegal/invalid (for example, it's not of expected type (boolean,
+		 * integer)).
+		 * <p>
+		 * The name of the parameter should be in the {@code detail} of the exception.
+		 * 
+		 * @see ApiException#ApiException(Type, String)
+		 * @see ApiException#ApiException(Type, String, Throwable)
+		 */
+		ILLEGAL_PARAMETER,
+		CONTEXT_NOT_FOUND,
+		USER_NOT_FOUND, URL_NOT_IN_CONTEXT, BAD_API_KEY, SCRIPT_NOT_FOUND, BAD_SCRIPT_FORMAT, NO_ACCESS,
+		/*
+		 * Indicates that the requested operation is not allowed in the current mode
+		 */
+		MODE_VIOLATION};
 	
+	private final Type type;
 	private final String detail;
 
     private final Logger logger = Logger.getLogger(this.getClass());
 
 	public ApiException(Type type) {
-		super(type.name().toLowerCase());
-		this.detail = null;
+		this(type, null, null);
 	}
 
     public ApiException(Type type, Throwable cause) {
-        super(type.name().toLowerCase(), cause);
-        this.detail = null;
+        this(type, null, cause);
     }
 
 	public ApiException(Type type, String detail) {
-		super(type.name().toLowerCase());
-		this.detail = detail;
+		this(type, detail, null);
 	}
 
     public ApiException(Type type, String detail, Throwable cause) {
         super(type.name().toLowerCase(), cause);
+        this.type = type;
         this.detail = detail;
     }
 
-	@Override
-	public String toString () {
-		if (detail != null) {
-			return Constant.messages.getString("api.error." + super.getMessage()) +
-				" (" + super.getMessage() + ") : " + detail;
-		}
-		return Constant.messages.getString("api.error." + super.getMessage()) +
-			" (" + super.getMessage() + ")";
+	public Type getType() {
+		return type;
 	}
 
-	public String toString(API.Format format) {
+	@Override
+	public String toString () {
+		return this.toString(true);
+	}
+	
+	public String toString (boolean incDetails) {
+		if (! incDetails) {
+			return Constant.messages.getString("api.error." + super.getMessage());
+		} else if (detail != null) {
+			return Constant.messages.getString("api.error." + super.getMessage()) +
+				" (" + super.getMessage() + ") : " + detail;
+		} else {
+			return Constant.messages.getString("api.error." + super.getMessage()) +
+				" (" + super.getMessage() + ")";
+		}
+	}
+
+	public String toString(API.Format format, boolean incDetails) {
 		switch(format) {
 		case HTML:
 		case UI:
-			return this.toString();
+			return StringEscapeUtils.escapeHtml(this.toString(incDetails));
 			
 		case XML:
 			try {
@@ -93,11 +126,11 @@ public class ApiException extends Exception {
 				
 				rootElement.setAttribute("type", "exception");
 				rootElement.setAttribute("code", this.getMessage());
-				if (detail != null) {
+				if (incDetails && detail != null) {
 					rootElement.setAttribute("detail", XMLStringUtil.escapeControlChrs(this.detail));
 				}
 				
-				rootElement.appendChild(doc.createTextNode(XMLStringUtil.escapeControlChrs(this.toString())));
+				rootElement.appendChild(doc.createTextNode(XMLStringUtil.escapeControlChrs(this.toString(incDetails))));
 				
 				TransformerFactory transformerFactory = TransformerFactory.newInstance();
 				Transformer transformer = transformerFactory.newTransformer();
@@ -115,7 +148,7 @@ public class ApiException extends Exception {
 			break;
 
 		case JSON:
-			return this.toJSON().toString();
+			return this.toJSON(incDetails).toString();
 			
 		default:
 			break;
@@ -123,11 +156,11 @@ public class ApiException extends Exception {
 		return null;
 	}
 	
-	private JSONObject toJSON () {
+	private JSONObject toJSON (boolean incDetails) {
 		JSONObject ja = new JSONObject();
 		ja.put("code", super.getMessage());
 		ja.put("message", Constant.messages.getString("api.error." + super.getMessage()));
-		if (detail != null) {
+		if (incDetails && detail != null) {
 			ja.put("detail", detail);
 		}
 		return ja;

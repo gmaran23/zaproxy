@@ -105,6 +105,10 @@ public abstract class StandardFieldsDialog extends AbstractDialog {
 		this((Window)owner, titleLabel, dim);
 	}
 
+	public StandardFieldsDialog(Window owner, String titleLabel, Dimension dim, boolean modal) {
+		this(owner, titleLabel, dim, null, modal);
+	}
+
 	public StandardFieldsDialog(Window owner, String titleLabel, Dimension dim) {
 		this(owner, titleLabel, dim, null);
 	}
@@ -119,9 +123,13 @@ public abstract class StandardFieldsDialog extends AbstractDialog {
 	public StandardFieldsDialog(Frame owner, String titleLabel, Dimension dim, String[] tabLabels) {
 		this((Window)owner, titleLabel, dim, tabLabels);
 	}
-
+	
 	public StandardFieldsDialog(Window owner, String titleLabel, Dimension dim, String[] tabLabels) {
-		super(owner, false);
+		this(owner, titleLabel, dim, tabLabels, false);
+	}
+
+	public StandardFieldsDialog(Window owner, String titleLabel, Dimension dim, String[] tabLabels, boolean modal) {
+		super(owner, modal);
 		this.setTitle(Constant.messages.getString(titleLabel));
 		this.setXWeights(0.4D, 0.6D);	// Looks a bit better..
 		this.initialize(dim, tabLabels);
@@ -808,12 +816,8 @@ public abstract class StandardFieldsDialog extends AbstractDialog {
 		}
 		final ZapTextField text = new ZapTextField();
 		text.setEditable(editable);
-		if (value != null && value.getHistoryReference() != null) {
-			try {
-				text.setText(value.getHistoryReference().getURI().toString());
-			} catch (Exception e1) {
-				// Ignore
-			}
+		if (value != null) {
+			text.setText(getNodeText(value));
 		}
 		JButton selectButton = new JButton(Constant.messages.getString("all.button.select"));
 		selectButton.setIcon(new ImageIcon(View.class.getResource("/resource/icon/16/094.png"))); // Globe icon
@@ -825,12 +829,8 @@ public abstract class StandardFieldsDialog extends AbstractDialog {
 				NodeSelectDialog nsd = new NodeSelectDialog(StandardFieldsDialog.this);
 				nsd.setAllowRoot(allowRoot);
 				SiteNode node = nsd.showDialog(this.node);
-				if (node != null && node.getHistoryReference() != null) {
-					try {
-						text.setText(node.getHistoryReference().getURI().toString());
-					} catch (Exception e1) {
-						// Ignore
-					}
+				if (node != null) {
+					text.setText(getNodeText(node));
 					this.node = node;
 					siteNodeSelected(fieldLabel, node);
 				}
@@ -859,12 +859,8 @@ public abstract class StandardFieldsDialog extends AbstractDialog {
 		}
 		final ZapTextField text = new ZapTextField();
 		text.setEditable(editable);
-		if (value != null && value.getHistoryReference() != null) {
-			try {
-				text.setText(value.getHistoryReference().getURI().toString());
-			} catch (Exception e1) {
-				// Ignore
-			}
+		if (value != null) {
+			text.setText(getNodeText(value));
 		}
 		JButton selectButton = new JButton(Constant.messages.getString("all.button.select"));
 		selectButton.setIcon(new ImageIcon(View.class.getResource("/resource/icon/16/094.png"))); // Globe icon
@@ -876,12 +872,8 @@ public abstract class StandardFieldsDialog extends AbstractDialog {
 				NodeSelectDialog nsd = new NodeSelectDialog(StandardFieldsDialog.this);
 				nsd.setAllowRoot(allowRoot);
 				SiteNode node = nsd.showDialog(this.node);
-				if (node != null && node.getHistoryReference() != null) {
-					try {
-						text.setText(node.getHistoryReference().getURI().toString());
-					} catch (Exception e1) {
-						// Ignore
-					}
+				if (node != null) {
+					text.setText(getNodeText(node));
 					this.node = node;
 					siteNodeSelected(fieldLabel, node);
 				}
@@ -935,19 +927,60 @@ public abstract class StandardFieldsDialog extends AbstractDialog {
 		this.incTabOffset(tabIndex);
 	}
 	
-	private void setTextTarget(ZapTextField text, Target target) {
+	private void setTextTarget(ZapTextField field, Target target) {
+		String text = getTargetText(target);
+		if (text != null) {
+			field.setText(text);
+		}
+	}
+
+	/**
+	 * Returns the text representation of the given {@code target}.
+	 * <p>
+	 * If the {@code target} is not {@code null} it returns:
+	 * <ol>
+	 * <li>the URI, if it has a start node with an history reference;</li>
+	 * <li>"Context: " followed by context's name, if it has a context;</li>
+	 * <li>"Everything in scope", if it's only in scope.</li>
+	 * </ol>
+	 * For remaining cases it returns {@code null}.
+	 *
+	 * @param target the target whose text representation will be returned
+	 * @return the text representation of the given {@code target}, might be {@code null}
+	 * @since 2.4.2
+	 * @see Target#getStartNode()
+	 * @see Target#getContext()
+	 * @see Target#isInScopeOnly()
+	 */
+	protected static String getTargetText(Target target) {
 		if (target != null) {
-			if (target.getStartNode() != null && target.getStartNode().getHistoryReference() != null) {
-				text.setText(target.getStartNode().getHistoryReference().getURI().toString());
+			if (target.getStartNode() != null) {
+				return getNodeText(target.getStartNode());
 			} else if (target.getContext() != null) {
-				text.setText(Constant.messages.getString("context.prefixName", new Object[] {target.getContext().getName()}));
+				return Constant.messages.getString("context.prefixName", target.getContext().getName());
 			} else if (target.isInScopeOnly()) {
-				text.setText(Constant.messages.getString("context.allInScope"));
+				return Constant.messages.getString("context.allInScope");
 			}
 		}
-		
+		return null;
 	}
-	
+
+	private static String getNodeText(SiteNode node) {
+		if (node != null && node.getHistoryReference() != null) {
+			String url = node.getHistoryReference().getURI().toString();
+			if (node.isLeaf() && url.endsWith("/")) {
+				// String off the slash so we dont match a non leaf
+				// node with the same name
+				url = url.substring(0, url.length()-1);
+			} else if (! node.isLeaf() && ! url.endsWith("/")) {
+				// Add the slash to show its a non leaf node
+				url = url + "/";
+			}
+			return url;
+		}
+		return "";
+	}
+
 	public void addContextSelectField(String fieldLabel, Context selectedContext){
 		if (isTabbed()) {
 			throw new IllegalArgumentException("Initialised as a tabbed dialog - must use method with tab parameters");

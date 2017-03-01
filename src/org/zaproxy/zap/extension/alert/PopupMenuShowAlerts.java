@@ -29,6 +29,7 @@ import org.apache.commons.httpclient.URI;
 import org.parosproxy.paros.core.scanner.Alert;
 import org.parosproxy.paros.model.HistoryReference;
 import org.zaproxy.zap.view.messagecontainer.http.HttpMessageContainer;
+import org.zaproxy.zap.view.popup.ExtensionPopupMenuComponent;
 import org.zaproxy.zap.view.popup.PopupMenuHistoryReferenceContainer;
 
 public class PopupMenuShowAlerts extends PopupMenuHistoryReferenceContainer {
@@ -43,19 +44,11 @@ public class PopupMenuShowAlerts extends PopupMenuHistoryReferenceContainer {
         setProcessExtensionPopupChildren(false);
     }
 
-    @Override
-    protected boolean isEnable(HttpMessageContainer messageContainer) {
-        if (getMenuComponentCount() > 0) {
-            removeAll();
-        }
-
-        return super.isEnable(messageContainer);
-    }
-
 	@Override
 	public boolean isEnableForInvoker(Invoker invoker, HttpMessageContainer httpMessageContainer) {
 		switch (invoker) {
 		case SITES_PANEL:
+		case SPIDER_PANEL:
 		case HISTORY_PANEL:
 			return true;
 		default:
@@ -76,7 +69,7 @@ public class PopupMenuShowAlerts extends PopupMenuHistoryReferenceContainer {
 			if (hrefURI != null && ! alert.getUri().equals(hrefURI.toString())) {
 				continue;
 			}
-			final PopupMenuShowAlert menuItem = new PopupMenuShowAlert(alert.getAlert(), alert);
+			final PopupMenuShowAlert menuItem = new PopupMenuShowAlert(alert.getName(), alert);
 			menuItem.setIcon(new ImageIcon(alert.getIconUrl()));
 			
 			alertList.add(menuItem);
@@ -89,6 +82,13 @@ public class PopupMenuShowAlerts extends PopupMenuHistoryReferenceContainer {
 		
 		return (alertList.size() > 0);
     }
+
+	@Override
+	public void dismissed(ExtensionPopupMenuComponent selectedMenuComponent) {
+		if (getMenuComponentCount() > 0) {
+			removeAll();
+		}
+	}
 
     @Override
     public boolean isSafe() {

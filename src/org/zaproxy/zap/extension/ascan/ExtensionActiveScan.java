@@ -146,22 +146,16 @@ public class ExtensionActiveScan extends ExtensionAdaptor implements
     }
     
     @Override
-    public void optionsLoaded() {
+    public void postInit() {
     	policyManager.init();
 
 		if (Control.getSingleton().getMode().equals(Mode.attack)) {
-			if (this.getScannerParam().isAllowAttackOnStart()) {
-		    	if ( ! View.isInitialised()) {
-		    		// Need to do this in daemon mode or the active scanner wont start
-		    		Control.getSingleton().setMode(Control.Mode.attack);
-		    	}
+			if (View.isInitialised() && ! this.getScannerParam().isAllowAttackOnStart()) {
+				// Disable attack mode for safeties sake (when running with the UI)
+	   			View.getSingleton().getMainFrame().getMainToolbarPanel().setMode(Mode.standard);
 			} else {
-				// Disable attack mode for safeties sake
-		    	if (View.isInitialised()) {
-	    			View.getSingleton().getMainFrame().getMainToolbarPanel().setMode(Mode.standard);
-		    	} else {
-	    			Control.getSingleton().setMode(Control.Mode.standard);
-		    	}
+				// Needed to make sure the attackModeScanner starts up
+				this.attackModeScanner.sessionModeChanged(Control.getSingleton().getMode());
 			}
 		}
     }
@@ -510,16 +504,15 @@ public class ExtensionActiveScan extends ExtensionAdaptor implements
 
     @Override
     public void sessionAboutToChange(final Session session) {
-        if (activeScanApi != null) {
-            activeScanApi.reset();
-        }
-
-        // Stop all scans and reset the scan id counter
+        // Stop, remove all scans and reset the scan id counter
         this.ascanController.reset();
 		this.attackModeScanner.stop();
         
         if (View.isInitialised()) {
         	this.getActiveScanPanel().reset();
+            if (customScanDialog != null) {
+                customScanDialog.reset();
+            }
         }
     }
 
@@ -570,10 +563,6 @@ public class ExtensionActiveScan extends ExtensionAdaptor implements
     	
         if (View.isInitialised()) {
         this.getActiveScanPanel().reset();
-        }
-
-        if (activeScanApi != null) {
-            activeScanApi.reset();
         }
     }
 

@@ -581,7 +581,9 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 		String site = msg.getRequestHeader().getHostName() + ":" + msg.getRequestHeader().getHostPort();
 
 		site = ScanPanel.cleanSiteName(site, true);
-		this.getHttpSessionsPanel().addSiteAsynchronously(site);
+		if (getView() != null) {
+			this.getHttpSessionsPanel().addSiteAsynchronously(site);
+		}
 
 		// Check if it's enabled for proxy only
 		if (getParam().isEnabledProxyOnly() && initiator != HttpSender.PROXY_INITIATOR)
@@ -606,7 +608,7 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 	@Override
 	public void onHttpResponseReceive(HttpMessage msg, int initiator, HttpSender sender) {
 		if (initiator == HttpSender.ACTIVE_SCANNER_INITIATOR || initiator == HttpSender.SPIDER_INITIATOR
-				|| initiator == HttpSender.CHECK_FOR_UPDATES_INITIATOR) {
+				|| initiator == HttpSender.CHECK_FOR_UPDATES_INITIATOR || initiator == HttpSender.FUZZER_INITIATOR) {
 			// Not a session we care about
 			return;
 		}
@@ -615,7 +617,9 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 		String site = msg.getRequestHeader().getHostName() + ":" + msg.getRequestHeader().getHostPort();
 
 		site = ScanPanel.cleanSiteName(site, true);
-		this.getHttpSessionsPanel().addSiteAsynchronously(site);
+		if (getView() != null) {
+			this.getHttpSessionsPanel().addSiteAsynchronously(site);
+		}
 
 		// Check if it's enabled for proxy only
 		if (getParam().isEnabledProxyOnly() && initiator != HttpSender.PROXY_INITIATOR) {

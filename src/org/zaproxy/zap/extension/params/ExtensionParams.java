@@ -231,7 +231,9 @@ public class ExtensionParams extends ExtensionAdaptor
 	private void sessionChangedEventHandler(Session session) {
 		// Clear all scans
 		siteParamsMap = new HashMap <>();
-		this.getParamsPanel().reset();
+		if (getView() != null) {
+			this.getParamsPanel().reset();
+		}
 		if (session == null) {
 			// Closedown
 			return;
@@ -246,7 +248,9 @@ public class ExtensionParams extends ExtensionAdaptor
 			if (site.indexOf("//") >= 0) {
 				site = site.substring(site.indexOf("//") + 2);
 			}
-			this.getParamsPanel().addSite(site);
+			if (getView() != null) {
+				this.getParamsPanel().addSite(site);
+			}
 		}
 		
 		try {
@@ -268,7 +272,9 @@ public class ExtensionParams extends ExtensionAdaptor
 		// Check we know the site
 		String site = msg.getRequestHeader().getHostName() + ":" + msg.getRequestHeader().getHostPort();
 
-		this.getParamsPanel().addSite(site);
+		if (getView() != null) {
+			this.getParamsPanel().addSite(site);
+		}
 		
 		SiteParameters sps = this.siteParamsMap.get(site);
 		if (sps == null) {
@@ -354,7 +360,9 @@ public class ExtensionParams extends ExtensionAdaptor
 		// Check we know the site
 		String site = msg.getRequestHeader().getHostName() + ":" + msg.getRequestHeader().getHostPort();
 
-		this.getParamsPanel().addSite(site);
+		if (getView() != null) {
+			this.getParamsPanel().addSite(site);
+		}
 		
 		SiteParameters sps = this.getSiteParameters(site);
 
@@ -443,6 +451,34 @@ public class ExtensionParams extends ExtensionAdaptor
 			// Dont think we need to do this... at least until rescan option implemented ...
 			//Control.getSingleton().getMenuToolsControl().options(Constant.messages.getString("options.acsrf.title"));
 		}
+	}
+
+	/**
+	 * Tells whether or not the given {@code site} was already seen.
+	 *
+	 * @param site the site that will be checked
+	 * @return {@code true} if the given {@code site} was already seen, {@code false} otherwise.
+	 * @since 2.5.0
+	 * @see #hasParameters(String)
+	 */
+	public boolean hasSite(String site) {
+		return siteParamsMap.containsKey(site);
+	}
+
+	/**
+	 * Tells whether or not the given {@code site} has parameters.
+	 *
+	 * @param site the site that will be checked
+	 * @return {@code true} if the given {@code site} has parameters, {@code false} if not, or was not yet seen.
+	 * @since 2.5.0
+	 * @see #hasSite(String)
+	 */
+	public boolean hasParameters(String site) {
+		SiteParameters siteParameters = siteParamsMap.get(site);
+		if (siteParameters == null) {
+			return false;
+		}
+		return siteParameters.hasParams();
 	}
 
 	public SiteParameters getSiteParameters(String site) {

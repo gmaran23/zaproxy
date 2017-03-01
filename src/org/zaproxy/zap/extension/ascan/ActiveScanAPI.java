@@ -24,12 +24,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.regex.PatternSyntaxException;
 
 import net.sf.json.JSON;
 import net.sf.json.JSONObject;
 
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.httpclient.URI;
+import org.apache.commons.httpclient.URIException;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.log4j.Logger;
 import org.parosproxy.paros.control.Control;
@@ -144,9 +146,9 @@ public class ActiveScanAPI extends ApiImplementor {
 		this.addApiAction(new ApiAction(ACTION_EXCLUDE_FROM_SCAN, new String[] {PARAM_REGEX}));
 		this.addApiAction(new ApiAction(ACTION_ENABLE_ALL_SCANNERS, null, new String[] {PARAM_SCAN_POLICY_NAME}));
 		this.addApiAction(new ApiAction(ACTION_DISABLE_ALL_SCANNERS, null, new String[] {PARAM_SCAN_POLICY_NAME}));
-		this.addApiAction(new ApiAction(ACTION_ENABLE_SCANNERS, new String[] {PARAM_IDS}));
-		this.addApiAction(new ApiAction(ACTION_DISABLE_SCANNERS, new String[] {PARAM_IDS}));
-		this.addApiAction(new ApiAction(ACTION_SET_ENABLED_POLICIES, new String[] {PARAM_IDS}));
+		this.addApiAction(new ApiAction(ACTION_ENABLE_SCANNERS, new String[] {PARAM_IDS}, new String[] {PARAM_SCAN_POLICY_NAME}));
+		this.addApiAction(new ApiAction(ACTION_DISABLE_SCANNERS, new String[] {PARAM_IDS}, new String[] {PARAM_SCAN_POLICY_NAME}));
+		this.addApiAction(new ApiAction(ACTION_SET_ENABLED_POLICIES, new String[] {PARAM_IDS}, new String[] {PARAM_SCAN_POLICY_NAME}));
 		this.addApiAction(new ApiAction(ACTION_SET_POLICY_ATTACK_STRENGTH,
 				new String[] { PARAM_ID, PARAM_ATTACK_STRENGTH }, new String[] {PARAM_SCAN_POLICY_NAME}));
 		this.addApiAction(new ApiAction(ACTION_SET_POLICY_ALERT_THRESHOLD,
@@ -176,6 +178,7 @@ public class ActiveScanAPI extends ApiImplementor {
 		return PREFIX;
 	}
 
+	@SuppressWarnings({"fallthrough"})
 	@Override
 	public ApiResponse handleApiAction(String name, JSONObject params) throws ApiException {
 		log.debug("handleApiAction " + name + " " + params.toString());
@@ -186,7 +189,6 @@ public class ActiveScanAPI extends ApiImplementor {
 		try {
 			switch(name) {
 			case ACTION_SCAN_AS_USER:
-				String urlUserScan = ApiUtils.getNonEmptyStringParam(params, PARAM_URL);
 				int userID = ApiUtils.getIntParam(params, PARAM_USER_ID);
 				ExtensionUserManagement usersExtension = Control.getSingleton()
 						.getExtensionLoader()
@@ -195,7 +197,7 @@ public class ActiveScanAPI extends ApiImplementor {
 					throw new ApiException(Type.NO_IMPLEMENTOR, ExtensionUserManagement.NAME);
 				}
 				Context context = ApiUtils.getContextByParamId(params, PARAM_CONTEXT_ID);
-				if (!context.isIncluded(urlUserScan)) {
+				if (!context.isIncluded(params.getString(PARAM_URL))) {
 					throw new ApiException(Type.URL_NOT_IN_CONTEXT, PARAM_CONTEXT_ID);
 				}
 				user = usersExtension.getContextUserAuthManager(context.getIndex()).getUserById(userID);
@@ -206,10 +208,7 @@ public class ActiveScanAPI extends ApiImplementor {
 				// Same behaviour but with addition of the user to scan
 				// $FALL-THROUGH$
 			case ACTION_SCAN:
-				String url = params.getString(PARAM_URL);
-				if (url == null || url.length() == 0) {
-					throw new ApiException(ApiException.Type.MISSING_PARAMETER, PARAM_URL);
-				}
+				URI url = getTargetUrl(params.getString(PARAM_URL));
 
 				boolean scanJustInScope = user == null ? this.getParam(params, PARAM_JUST_IN_SCOPE, false) : false;
 
@@ -239,7 +238,7 @@ public class ActiveScanAPI extends ApiImplementor {
 				}
 
 				int scanId = scanURL(
-						params.getString(PARAM_URL),
+						url,
 						user,
 						this.getParam(params, PARAM_RECURSE, true),
 						scanJustInScope,
@@ -281,6 +280,7 @@ public class ActiveScanAPI extends ApiImplementor {
 					Session session = Model.getSingleton().getSession();
 					session.setExcludeFromScanRegexs(new ArrayList<String>());
 				} catch (DatabaseException e) {
+					log.error(e.getMessage(), e);
 					throw new ApiException(ApiException.Type.INTERNAL_ERROR, e.getMessage());
 				}
 			    break;
@@ -289,8 +289,11 @@ public class ActiveScanAPI extends ApiImplementor {
 				try {
 					Session session = Model.getSingleton().getSession();
 					session.addExcludeFromScanRegexs(regex);
-				} catch (Exception e) {
-					throw new ApiException(ApiException.Type.BAD_FORMAT, PARAM_REGEX);
+				} catch (DatabaseException e) {
+					log.error(e.getMessage(), e);
+					throw new ApiException(ApiException.Type.INTERNAL_ERROR, e.getMessage());
+				}catch (PatternSyntaxException e) {
+					throw new ApiException(ApiException.Type.ILLEGAL_PARAMETER, PARAM_REGEX);
 				}
 				break;
 			case ACTION_ENABLE_ALL_SCANNERS:
@@ -337,7 +340,7 @@ public class ActiveScanAPI extends ApiImplementor {
 
 				for (Plugin scanner : policy.getPluginFactory().getAllPlugin()) {
 					if (scanner.getCategory() == policyId) {
-						setAlertThresholdToScanner(alertThreshold1, scanner);
+						scanner.setAlertThreshold(alertThreshold1);
 					}
 				}
 				policy.save();
@@ -351,7 +354,7 @@ public class ActiveScanAPI extends ApiImplementor {
 			case ACTION_SET_SCANNER_ALERT_THRESHOLD:
 				policy = getScanPolicyFromParams(params);
 				AlertThreshold alertThreshold2 = getAlertThresholdFromParamAlertThreshold(params);
-				setAlertThresholdToScanner(alertThreshold2, getScannerFromParamId(policy, params));
+				getScannerFromParamId(policy, params).setAlertThreshold(alertThreshold2);
 				policy.save();
 				break;
 			case ACTION_ADD_SCAN_POLICY:
@@ -384,8 +387,21 @@ public class ActiveScanAPI extends ApiImplementor {
 		return ApiResponseElement.OK;
 	}
 
+	private static URI getTargetUrl(String url) throws ApiException {
+		try {
+			URI targetUrl = new URI(url, false);
+			String scheme = targetUrl.getScheme();
+			if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+				throw new ApiException(ApiException.Type.ILLEGAL_PARAMETER, PARAM_URL);
+			}
+			return targetUrl;
+		} catch (URIException e) {
+			throw new ApiException(ApiException.Type.ILLEGAL_PARAMETER, PARAM_URL);
+		}
+	}
+
 	private ScanPolicy getScanPolicyFromParams(JSONObject params) throws ApiException {
-		String policyName = null;;
+		String policyName = null;
 		try {
 			policyName = params.getString(PARAM_SCAN_POLICY_NAME);
 		} catch (Exception e1) {
@@ -438,19 +454,12 @@ public class ActiveScanAPI extends ApiImplementor {
 				try {
 					Plugin scanner = policy.getPluginFactory().getPlugin(Integer.valueOf(id.trim()).intValue());
 					if (scanner != null) {
-						setScannerEnabled(scanner, enabled);
+						scanner.setEnabled(enabled);
 					}
 				} catch (NumberFormatException e) {
 					log.warn("Failed to parse scanner ID: ", e);
 				}
 			}
-		}
-	}
-
-	private static void setScannerEnabled(Plugin scanner, boolean enabled) {
-		scanner.setEnabled(enabled);
-		if (enabled && scanner.getAlertThreshold() == Plugin.AlertThreshold.OFF) {
-			scanner.setAlertThreshold(Plugin.AlertThreshold.DEFAULT);
 		}
 	}
 
@@ -463,7 +472,7 @@ public class ActiveScanAPI extends ApiImplementor {
 					if (hasPolicyWithId(policyId)) {
 						for (Plugin scanner : policy.getPluginFactory().getAllPlugin()) {
 							if (scanner.getCategory() == policyId) {
-							    setScannerEnabled(scanner, true);
+							    scanner.setEnabled(true);
 							}
 						}
 					}
@@ -507,11 +516,6 @@ public class ActiveScanAPI extends ApiImplementor {
 		}
 	}
 
-	private static void setAlertThresholdToScanner(Plugin.AlertThreshold alertThreshold, Plugin scanner) {
-		scanner.setAlertThreshold(alertThreshold);
-		scanner.setEnabled(!Plugin.AlertThreshold.OFF.equals(alertThreshold));
-	}
-
 	private Plugin getScannerFromParamId(ScanPolicy policy, JSONObject params) throws ApiException {
 		final int id = getParam(params, PARAM_ID, -1);
 		if (id == -1) {
@@ -524,15 +528,33 @@ public class ActiveScanAPI extends ApiImplementor {
 		return scanner;
 	}
 
-	private int scanURL(String url, User user, boolean scanChildren, boolean scanJustInScope, String method, String postData, ScanPolicy policy) throws ApiException {
+	private int scanURL(URI url, User user, boolean scanChildren, boolean scanJustInScope, String method, String postData, ScanPolicy policy) throws ApiException {
 		// Try to find node
 		StructuralNode node;
 		
 		try {
-			node = SessionStructure.find(Model.getSingleton().getSession().getSessionId(), new URI(url, false), method, postData);
+			node = SessionStructure.find(Model.getSingleton().getSession().getSessionId(), url, method, postData);
 			if (node == null) {
 				throw new ApiException(ApiException.Type.URL_NOT_FOUND);
 			}
+			
+			switch (Control.getSingleton().getMode()) {
+			case safe:
+				throw new ApiException(ApiException.Type.MODE_VIOLATION);
+			case protect:
+				if (!Model.getSingleton().getSession().isInScope(url.toString())) {
+					throw new ApiException(ApiException.Type.MODE_VIOLATION);
+				}
+				// No problem
+				break;
+			case standard:
+				// No problem
+				break;
+			case attack:
+				// No problem
+				break;
+			}
+			
 			Target target = new Target(node);
 			target.setRecurse(scanChildren);
 			target.setInScopeOnly(scanJustInScope);
@@ -591,33 +613,25 @@ public class ActiveScanAPI extends ApiImplementor {
 					resultList.addItem(new ApiResponseElement("id", XMLStringUtil.escapeControlChrs(hp.getHostAndPort())));
 
 					for (Plugin plugin : hp.getCompleted()) {
-						ApiResponseList pList = new ApiResponseList("Plugin");
-						pList.addItem(new ApiResponseElement("name", XMLStringUtil.escapeControlChrs(plugin.getName())));
-						pList.addItem(new ApiResponseElement("id", Integer.toString(plugin.getId())));
-						pList.addItem(new ApiResponseElement("status", "Complete"));
 						long timeTaken = plugin.getTimeFinished().getTime() - plugin.getTimeStarted().getTime();
-						pList.addItem(new ApiResponseElement("timeInMs", Long.toString(timeTaken)));
-						hpList.addItem(pList);
+						int reqs = hp.getPluginRequestCount(plugin.getId());
+						hpList.addItem(createPluginProgressEntry(plugin, "Complete", timeTaken, reqs));
 			        }
 
 			        for (Plugin plugin : hp.getRunning()) {
-						ApiResponseList pList = new ApiResponseList("Plugin");
-						int pc = (int)(hp.getTestCurrentCount(plugin) * 100 / hp.getTestTotalCount());
-						pList.addItem(new ApiResponseElement("name", XMLStringUtil.escapeControlChrs(plugin.getName())));
-						pList.addItem(new ApiResponseElement("id", Integer.toString(plugin.getId())));
-						pList.addItem(new ApiResponseElement("status", pc + "%"));
+						int pc = hp.getTestCurrentCount(plugin) * 100 / hp.getTestTotalCount();
+						// Make sure not return 100 (or more) if still running...
+						// That might happen if more nodes are being scanned that the ones enumerated at the beginning.
+						if (pc >= 100) {
+							pc = 99;
+						}
 						long timeTaken = new Date().getTime() - plugin.getTimeStarted().getTime();
-						pList.addItem(new ApiResponseElement("timeInMs", Long.toString(timeTaken)));
-						hpList.addItem(pList);
+						int reqs = hp.getPluginRequestCount(plugin.getId());
+						hpList.addItem(createPluginProgressEntry(plugin, pc + "%", timeTaken, reqs));
 			        }
 
 			        for (Plugin plugin : hp.getPending()) {
-						ApiResponseList pList = new ApiResponseList("Plugin");
-						pList.addItem(new ApiResponseElement("name", XMLStringUtil.escapeControlChrs(plugin.getName())));
-						pList.addItem(new ApiResponseElement("id", Integer.toString(plugin.getId())));
-						pList.addItem(new ApiResponseElement("status", "Pending"));
-						pList.addItem(new ApiResponseElement("timeInMs", "0"));
-						hpList.addItem(pList);
+						hpList.addItem(createPluginProgressEntry(plugin, "Pending", 0, 0));
 			        }
 					resultList.addItem(hpList);
 
@@ -710,6 +724,17 @@ public class ActiveScanAPI extends ApiImplementor {
 		return result;
 	}
 
+	private static ApiResponseList createPluginProgressEntry(Plugin plugin, String status, long timeTaken, int requestCount) {
+		ApiResponseList pList = new ApiResponseList("Plugin");
+		pList.addItem(new ApiResponseElement("name", XMLStringUtil.escapeControlChrs(plugin.getName())));
+		pList.addItem(new ApiResponseElement("id", Integer.toString(plugin.getId())));
+		pList.addItem(new ApiResponseElement("quality", plugin.getStatus().toString()));
+		pList.addItem(new ApiResponseElement("status", status));
+		pList.addItem(new ApiResponseElement("timeInMs", Long.toString(timeTaken)));
+		pList.addItem(new ApiResponseElement("reqCount", Integer.toString(requestCount)));
+		return pList;
+	}
+
 	private boolean isPolicyEnabled(ScanPolicy policy, int category) {
 		for (Plugin scanner : policy.getPluginFactory().getAllPlugin()) {
 			if (scanner.getCategory() == category && !scanner.isEnabled()) {
@@ -766,6 +791,7 @@ public class ActiveScanAPI extends ApiImplementor {
 			scannerData.put("alertThreshold", String.valueOf(scanner.getAlertThreshold(true)));
 			scannerData.put("policyId", String.valueOf(scanner.getCategory()));
 			scannerData.put("enabled", String.valueOf(scanner.isEnabled()));
+			scannerData.put("quality", scanner.getStatus().toString());
 
 			boolean allDepsAvailable = policy.getPluginFactory().hasAllDependenciesAvailable(scanner);
 			scannerData.put("allDependenciesAvailable", Boolean.toString(allDepsAvailable));
@@ -850,9 +876,5 @@ public class ActiveScanAPI extends ApiImplementor {
 			sb.append("]\n");
 			return sb.toString();
 		}
-	}
-
-	void reset() {
-		controller.removeAllScans();
 	}
 }
