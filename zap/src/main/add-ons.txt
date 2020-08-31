@@ -1,0 +1,35 @@
+# List of add-ons to include in main releases (non-SNAPSHOT),
+# automatically downloaded when the distributions are built.
+# Not all add-ons are included in all distributions, for example,
+# OS specific add-ons are included only in the respective OS distribution.
+#
+# The URLs should be followed by the checksum (SHA-256).
+
+https://github.com/zaproxy/zap-extensions/releases/download/alertFilters-v10/alertFilters-release-10.zap b49fb21e407694ecc52b9202fa53a0edc02b122b253b97b3308e24bcb9df0ab6
+https://github.com/zaproxy/zap-extensions/releases/download/ascanrules-v34/ascanrules-release-34.zap cc72b06cdd905cd0027b670cce228d947c9a54f985f1c567c54bf0f2e666bbc6
+https://github.com/zaproxy/zap-extensions/releases/download/bruteforce-v9/bruteforce-beta-9.zap 67a3035c99059df14610dcaee19f6ddd7822e133e030f501d4d3dba5c3faaa3f
+https://github.com/zaproxy/zap-extensions/releases/download/diff-v10/diff-beta-10.zap 49f3637cc752b588be6dea182ecf362007e37d70976fd0dadff61925ae0dfd7b
+https://github.com/zaproxy/zap-extensions/releases/download/directorylistv1-v4/directorylistv1-release-4.zap 37581b311526009a8c7f070c1b843c6798c81a90856b04e9b63fb35001ef1317
+https://github.com/zaproxy/zap-extensions/releases/download/fuzz-v12/fuzz-beta-12.zap 0a3cff795e15383d38f437ce2fd968452af30d52247bd799a07abfc0e21e961f
+https://github.com/zaproxy/zap-extensions/releases/download/gettingStarted-v11/gettingStarted-release-11.zap 83aad2a4df5f525db8acb620b3b39671cc97be6c8f3149d8b3807d4940f523cf
+https://github.com/zaproxy/zap-core-help/releases/download/help-v10/help-release-10.zap aaa34b8844680c07fedcd606eec9b1edd52b496004fdaefbdff2b0285601a657
+https://github.com/zaproxy/zap-hud/releases/download/v0.9.0/hud-beta-0.9.0.zap fc7842ad06de8e157fba9363a5943dffe5ff0d332d83b3700aef1ebd4054a8e2
+https://github.com/zaproxy/zap-extensions/releases/download/importurls-v7/importurls-beta-7.zap 5f21011e2b91ccc1503a6fbec67464d597c6026893624bc52a3d1bc7c31afbf8
+https://github.com/zaproxy/zap-extensions/releases/download/invoke-v10/invoke-beta-10.zap 67b8817a8ebd224eba16ab24f1190602b57cae328f2d051c7c8ad0fd5a3effca
+https://github.com/zaproxy/zap-extensions/releases/download/onlineMenu-v7/onlineMenu-release-7.zap 59973f69b5173bf8c3ca37ff2692bc093cf5a23d0b9869d436b4140d4467e729
+https://github.com/zaproxy/zap-extensions/releases/download/openapi-v15/openapi-beta-15.zap e8e39842e9d7d2a4ece3027b37f150ce0cddb9144072355139866ba3af430ed1
+https://github.com/zaproxy/zap-extensions/releases/download/pscanrules-v26/pscanrules-release-26.zap cd6613a7cc0140e551dc72c0316ded5a07a8803aee599f01e6aa5e44046ccf7c
+https://github.com/zaproxy/zap-extensions/releases/download/quickstart-v27/quickstart-release-27.zap 0ed027a3f2e4da5f00316b374be7a9d5e7a5f5c49d2a6565ce3cd7fca090d129
+https://github.com/zaproxy/zap-extensions/releases/download/replacer-v8/replacer-beta-8.zap eac8033705419ec939f2ed1ac50874f50f2cdabd12d7941b0c73389168bfd2a7
+https://github.com/zaproxy/zap-extensions/releases/download/reveal-v3/reveal-release-3.zap 00007169079c8f62c29e7b879cb6162b0737d41e85607fa4541c601854cfe78a
+https://github.com/zaproxy/zap-extensions/releases/download/saverawmessage-v5/saverawmessage-release-5.zap 8e53f74fe5f4273c93eb2b63738590c0bef11d0d1f9b7b6366f333c1f6817b84
+https://github.com/zaproxy/zap-extensions/releases/download/savexmlmessage-v0.1.0/savexmlmessage-alpha-0.1.0.zap 8d522e94426e6106f3d3e0e8a492f9f536590c3ce371b45b08be90362a91322c
+https://github.com/zaproxy/zap-extensions/releases/download/scripts-v26/scripts-beta-26.zap 339f9e622f2d17d429435d41b1a6933b73cdee0cedba42b76d2c46170f3004b7
+https://github.com/zaproxy/zap-extensions/releases/download/selenium-v15.1.0/selenium-release-15.1.0.zap 054981b8f22e424413ec293aeebf30e850f920c999bf7f6465db3049dccfd86b
+https://github.com/zaproxy/zap-extensions/releases/download/spiderAjax-v23.1.0/spiderAjax-release-23.1.0.zap 20265ffe64ffa2a4e8d20d98cecdae55775a63a56ec34c40d3c09f27bc73c188
+https://github.com/zaproxy/zap-extensions/releases/download/tips-v7/tips-beta-7.zap 5aca2c5c85bfa68f6cf46bcb4d522cdb16c5168f056b88e6b81491853a9c714e
+https://github.com/zaproxy/zap-extensions/releases/download/webdriverlinux-v16/webdriverlinux-release-16.zap e05baa306aeeb1078321d6ae587eaae633e6097a5132a327c1c51d71d1e1d776
+https://github.com/zaproxy/zap-extensions/releases/download/webdrivermacos-v15/webdrivermacos-release-15.zap dfb79003b3b929e9ce551356f3dedee0ed2606457fc715858c85e2d4fef5b0d1
+https://github.com/zaproxy/zap-extensions/releases/download/webdriverwindows-v16/webdriverwindows-release-16.zap 0caeaea34d7187b2c9169e3801f7271055184679927c3426ee040ece62de2c68
+https://github.com/zaproxy/zap-extensions/releases/download/websocket-v21/websocket-release-21.zap 43161eb99015d117bc9ee654eba01952d7e4065cd4b8e3c0c6e374d1a8779e21
+https://github.com/zaproxy/zap-extensions/releases/download/zest-v31/zest-beta-31.zap 34d3d85dea5a16d29b5c9cdc9c174934f0f593d39b794f7aa4f8980a48df0962
